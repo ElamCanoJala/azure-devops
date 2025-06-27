@@ -25,6 +25,6 @@
 
 ## Resultado Esperado
 
-- VM creada en Azure
+- VM creada en Azure.
 - IIS instalado
 - Podés acceder por navegador a `http://<IP_VM>`
