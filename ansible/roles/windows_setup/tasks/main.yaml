@@ -1,0 +1,4 @@
+- name: Enable IIS Web Server
+  win_feature:
+    name: Web-Server
+    state: present

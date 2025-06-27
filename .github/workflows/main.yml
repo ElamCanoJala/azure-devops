@@ -1,0 +1,69 @@
+name: Provision and Configure Windows VM
+
+on:
+  push:
+    branches: [main]
+
+env:
+  TF_VAR_admin_username: ansibleuserelam
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  TF_VAR_admin_password: ${{ secrets.TF_VAR_admin_password }}
+
+jobs:
+  terraform:
+    name: Provision with Terraform
+    runs-on: ubuntu-latest
+    outputs:
+      vm_ip: ${{ steps.get-ip.outputs.vm_ip }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve
+
+      - name: Get VM IP
+        id: get-ip
+        working-directory: terraform
+        run: echo "vm_ip=$(terraform output -raw vm_ip)" >> $GITHUB_OUTPUT
+
+  ansible:
+    name: Configure IIS with Ansible
+    needs: terraform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Ansible and pywinrm
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip
+          pip install ansible pywinrm
+
+      - name: Create inventory.ini
+        run: |
+          echo "[windows]" > inventory.ini
+          echo "${{ needs.terraform.outputs.vm_ip }}" >> inventory.ini
+          echo "" >> inventory.ini
+          echo "[windows:vars]" >> inventory.ini
+          echo "ansible_user=${{ env.TF_VAR_admin_username }}" >> inventory.ini
+          echo "ansible_password=${{ env.TF_VAR_admin_password }}" >> inventory.ini
+          echo "ansible_connection=winrm" >> inventory.ini
+          echo "ansible_winrm_transport=basic" >> inventory.ini
+          echo "ansible_winrm_server_cert_validation=ignore" >> inventory.ini
+
+      - name: Run Ansible Playbook
+        run: |
+          ansible-playbook -i inventory.ini ansible/playbook.yaml
